@@ -1,21 +1,114 @@
 'use client'
 
-import React, { useRef, useEffect } from 'react'
-import { useChat } from 'ai/react'
-import { Send, Home } from 'lucide-react'
+import React, { useState } from 'react'
+import { Send, Home, Info, Clock, LineChart } from 'lucide-react'
+
+interface TrustAnalysis {
+  trustScore: string;
+  rugPullRisk: string;
+  volumeAnalysis: string;
+  holderDistribution: string;
+  growthPattern: string;
+  liquidityHealth: {
+    value: string;
+    change: string;
+  };
+  marketImpact: string;
+  marketCapTrend: string;
+  lastUpdated: string;
+  tokenInfo: {
+    mint: string;
+    supply: string;
+    creator: string;
+    marketCap: string;
+    mintAuthority: string;
+    lpLocked: string;
+  };
+}
 
 export default function Terminal() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, reload, setMessages } = useChat()
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [analysis, setAnalysis] = useState<TrustAnalysis | null>(null);
+  const [currentToken, setCurrentToken] = useState('');
+  const [view, setView] = useState<'home' | 'analysis'>('home');
 
   const handleReset = () => {
-    setMessages([])
-    handleInputChange({ target: { value: '' } } as any)
-  }
+    setView('home');
+    setInput('');
+    setAnalysis(null);
+    setCurrentToken('');
+  };
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value);
+  };
+
+  const analyzeToken = async (address: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/trust?tokenAddress=${address}&network=solana`);
+      const data = await response.json();
+      setAnalysis(data);
+      setCurrentToken(address);
+      setView('analysis');
+    } catch (error) {
+      console.error('Error analyzing token:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input.trim()) {
+      analyzeToken(input.trim());
+      setInput('');
+    }
+  };
+
+  const renderHomeView = () => (
+    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+      <button 
+        onClick={() => handleInputChange({ target: { value: 'Explain UOS?' } } as any)}
+        className="bg-white/10 backdrop-blur-sm p-6 rounded-lg hover:bg-white/20 transition-colors text-left"
+      >
+        <h2 className="text-xl font-mono mb-2 flex items-center gap-2">
+          <Info className="w-5 h-5" />
+          Explain UOS?
+        </h2>
+        <p className="text-black/70 text-sm">
+          Learn about Universal OS and its features
+        </p>
+      </button>
+
+      <button 
+        onClick={() => handleInputChange({ target: { value: 'Roadmap?' } } as any)}
+        className="bg-white/10 backdrop-blur-sm p-6 rounded-lg hover:bg-white/20 transition-colors text-left"
+      >
+        <h2 className="text-xl font-mono mb-2 flex items-center gap-2">
+          <Clock className="w-5 h-5" />
+          Roadmap?
+        </h2>
+        <p className="text-black/70 text-sm">
+          View our development timeline and future plans
+        </p>
+      </button>
+
+      <button 
+        onClick={() => setView('analysis')}
+        className="bg-white/10 backdrop-blur-sm p-6 rounded-lg hover:bg-white/20 transition-colors text-left"
+      >
+        <h2 className="text-xl font-mono mb-2 flex items-center gap-2">
+          <LineChart className="w-5 h-5" />
+          Live trading data 📈
+        </h2>
+        <p className="text-black/70 text-sm">
+          View real-time token analysis and metrics
+        </p>
+      </button>
+    </div>
+  );
 
   return (
     <div className="fixed inset-x-0 top-0 bottom-24 p-4 md:p-8">
@@ -32,70 +125,128 @@ export default function Terminal() {
             <div className="text-black text-xs">Universal OS v1.0</div>
           </div>
 
-          {/* Terminal Content */}
-          <div className="flex-1 overflow-y-auto p-4 font-mono text-sm text-black scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-            {messages.length === 0 && (
-              <div className="text-black/70 text-center py-20">
-                <p className="mb-4">Welcome to Universal OS. I am your AI assistant. How may I assist you today?</p>
-                <div className="flex flex-col items-center gap-2 mt-4">
-                  <button
-                    onClick={() => handleInputChange({ target: { value: 'Explain UOS?' } } as any)}
-                    className="text-black/80 hover:text-black hover:underline cursor-pointer"
-                  >
-                    Explain UOS?
-                  </button>
-                  <button
-                    onClick={() => handleInputChange({ target: { value: 'Roadmap?' } } as any)}
-                    className="text-black/80 hover:text-black hover:underline cursor-pointer"
-                  >
-                    Roadmap?
-                  </button>
-                </div>
-              </div>
+          {/* Content Area */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {view === 'home' ? (
+              renderHomeView()
+            ) : (
+              <>
+                {currentToken && (
+                  <div className="mb-4 text-sm text-black/70">
+                    Currently analyzing: {currentToken}
+                  </div>
+                )}
+
+                {loading ? (
+                  <div className="text-center py-4">Analyzing token...</div>
+                ) : analysis ? (
+                  <div className="grid grid-cols-12 gap-4">
+                    {/* Left Panel - Key Metrics */}
+                    <div className="col-span-3 grid grid-cols-2 gap-4">
+                      {/* Trust Score */}
+                      <div className="bg-white/5 p-4 rounded-lg">
+                        <h3 className="text-sm text-black/70 mb-1">Trust Score</h3>
+                        <p className="text-2xl font-bold">{analysis.trustScore}</p>
+                        <span className={`mt-1 inline-block px-2 py-1 rounded text-sm ${
+                          analysis.rugPullRisk.includes('HIGH') ? 'bg-red-100 text-red-800' : 
+                          analysis.rugPullRisk.includes('Medium') ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {analysis.rugPullRisk}
+                        </span>
+                      </div>
+
+                      {/* Market Cap */}
+                      <div className="bg-white/5 p-4 rounded-lg">
+                        <h3 className="text-sm text-black/70 mb-1">Market Cap</h3>
+                        <p className="text-2xl font-bold">{analysis.marketCapTrend}</p>
+                        <p className="text-sm text-black/50">24h movement</p>
+                      </div>
+
+                      {/* 24h Volume */}
+                      <div className="bg-white/5 p-4 rounded-lg">
+                        <h3 className="text-sm text-black/70 mb-1">Volume (24h)</h3>
+                        <p className="text-2xl font-bold">{analysis.volumeAnalysis}</p>
+                        <p className="text-sm text-black/50">Trading volume</p>
+                      </div>
+
+                      {/* Liquidity */}
+                      <div className="bg-white/5 p-4 rounded-lg">
+                        <h3 className="text-sm text-black/70 mb-1">Liquidity</h3>
+                        <p className="text-2xl font-bold">{analysis.liquidityHealth.value}</p>
+                        <p className="text-sm text-black/50">{analysis.liquidityHealth.change} change</p>
+                      </div>
+                    </div>
+
+                    {/* Right Panel - Market Data */}
+                    <div className="col-span-9 space-y-4">
+                      {/* Token Info Box */}
+                      <div className="bg-white/5 p-4 rounded-lg">
+                        <h3 className="font-semibold mb-3">Token Overview</h3>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-black/50">Mint</span>
+                            <a 
+                              href={`https://solscan.io/token/${analysis.tokenInfo.mint}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {shortenAddress(analysis.tokenInfo.mint)}
+                            </a>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-black/50">Supply</span>
+                            <p>{analysis.tokenInfo.supply}</p>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-black/50">Creator</span>
+                            <a 
+                              href={`https://solscan.io/account/${analysis.tokenInfo.creator}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {shortenAddress(analysis.tokenInfo.creator)}
+                            </a>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-black/50">Market Cap</span>
+                            <p>{analysis.tokenInfo.marketCap}</p>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-black/50">Mint Authority</span>
+                            <p>{analysis.tokenInfo.mintAuthority}</p>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-black/50">LP Locked</span>
+                            <p>{analysis.tokenInfo.lpLocked}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-20 text-black/50">
+                    Enter a token address to analyze
+                  </div>
+                )}
+              </>
             )}
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`mb-4 ${
-                  message.role === 'user'
-                    ? 'bg-white/5 rounded-lg p-3'
-                    : 'text-black/90'
-                }`}
-              >
-                <span className="font-bold text-black">
-                  {message.role === 'user' ? '> ' : 'UOS: '}
-                </span>
-                <span className="whitespace-pre-wrap text-black/90">{message.content}</span>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="text-black/70">
-                Processing your request...
-              </div>
-            )}
-            {error && (
-              <div className="text-red-500">
-                Error: {error.message || 'An error occurred. Please try again.'}
-              </div>
-            )}
-            <div ref={messagesEndRef} />
           </div>
 
-          {/* Terminal Input */}
-          <form
-            onSubmit={handleSubmit}
-            className="flex p-4 bg-white/5 border-t border-white/10"
-          >
+          {/* Search Input */}
+          <form onSubmit={handleSubmit} className="flex p-4 bg-white/5 border-t border-white/10">
             <input
               type="text"
               value={input}
               onChange={handleInputChange}
-              placeholder="Enter your command..."
+              placeholder="Enter token address..."
               className="flex-1 bg-white/5 text-black placeholder-black/50 px-4 py-3 rounded-l-md focus:outline-none focus:ring-2 focus:ring-black/30"
             />
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={loading}
               className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black border-l border-white/10 transition-colors duration-200 disabled:opacity-50"
             >
               <Send className="w-5 h-5" />
@@ -112,6 +263,11 @@ export default function Terminal() {
         </div>
       </div>
     </div>
-  )
+  );
+}
+
+function shortenAddress(address: string): string {
+  if (!address || address === 'Unknown') return 'Unknown';
+  return `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
 

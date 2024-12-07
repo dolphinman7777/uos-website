@@ -1,100 +1,142 @@
 import { NextResponse } from 'next/server';
 
+// Define types for our response
+interface TrustAnalysis {
+  trustScore: string;
+  rugPullRisk: string;
+  volumeAnalysis: string;
+  holderDistribution: string;
+  growthPattern: string;
+  liquidityHealth: {
+    value: string;
+    change: string;
+  };
+  marketImpact: string;
+  marketCapTrend: string;
+  lastUpdated: string;
+  tokenInfo: {
+    mint: string;
+    supply: string;
+    creator: string;
+    marketCap: string;
+    mintAuthority: string;
+    lpLocked: string;
+  };
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const tokenAddress = searchParams.get('tokenAddress') || '79HZeHkX9A5WfBg72ankd1ppTXGepoSGpmkxW63wsrHY';
-  const network = searchParams.get('network') || 'solana';
+  let tokenAddress = searchParams.get('tokenAddress');
+
+  if (!tokenAddress) {
+    return NextResponse.json({
+      error: 'Please provide a token address'
+    }, { status: 400 });
+  }
 
   try {
-    // Here we'll analyze the Solana token specifically
-    // This is where you'd integrate with your Solana data providers
-    const mockPerformance = {
-      priceChange24h: 5.23,
-      volumeChange24h: 12.45,
-      trade_24h_change: 8.32,
-      liquidity: 500000,
-      liquidityChange24h: 3.12,
-      holderChange24h: 42,
-      rugPull: false,
-      isScam: false,
-      marketCapChange24h: 6.78,
-      sustainedGrowth: true,
-      rapidDump: false,
-      suspiciousVolume: false,
-      validationTrust: 0.85, // 85% trust score
-      lastUpdated: new Date()
+    // Get DexScreener data
+    const dexResponse = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
+    );
+    const dexData = await dexResponse.json();
+    const pair = dexData.pairs?.[0] || {};
+
+    // Transform the data using DexScreener values
+    const analysis: TrustAnalysis = {
+      trustScore: determineRiskScore(pair),
+      rugPullRisk: determineRiskLevel(pair),
+      volumeAnalysis: formatUSD(pair.volume?.h24 || 0),
+      holderDistribution: `${pair.holders || 0} holders`,
+      growthPattern: determineGrowthPattern(pair),
+      marketImpact: `${pair.priceChange?.h24 || 0}%`,
+      marketCapTrend: formatUSD(pair.marketCap || 0),
+      liquidityHealth: {
+        value: formatUSD(pair.liquidity?.usd || 0),
+        change: `${pair.liquidity?.h24ChangePercent || 0}%`
+      },
+      lastUpdated: new Date().toLocaleString(),
+      tokenInfo: {
+        mint: pair.baseToken?.address || tokenAddress,
+        supply: formatSupply(pair.baseToken?.totalSupply),
+        creator: pair.baseToken?.creator || 'Unknown',
+        marketCap: formatUSD(pair.marketCap || 0),
+        mintAuthority: pair.baseToken?.mintAuthority || '-',
+        lpLocked: `${pair.liquidity?.locked ? '100.00' : '0.00'}%`
+      }
     };
 
-    // In a real implementation, you'd fetch this data from:
-    // - Solana RPC nodes
-    // - DEX APIs (Raydium, Serum, etc.)
-    // - Token metadata
-    // - Holder analytics
-    // - Trading volume data
-    // - Liquidity pool information
-
-    return NextResponse.json(mockPerformance);
+    return NextResponse.json(analysis);
   } catch (error) {
-    console.error('Error analyzing Solana token:', error);
-    return NextResponse.json(
-      { error: 'Failed to analyze token' },
-      { status: 500 }
-    );
+    console.error('Error:', error);
+    return NextResponse.json({
+      trustScore: 'N/A%',
+      rugPullRisk: 'Unknown',
+      volumeAnalysis: 'N/A',
+      holderDistribution: 'N/A',
+      growthPattern: 'Unknown',
+      marketImpact: 'N/A',
+      marketCapTrend: 'N/A',
+      liquidityHealth: {
+        value: 'N/A',
+        change: 'N/A'
+      },
+      lastUpdated: new Date().toLocaleString()
+    });
   }
 }
 
-function normalizePerformance(performance: number): number {
-  // Add min/max bounds
-  const MIN_PERFORMANCE = -100;
-  const MAX_PERFORMANCE = 1000;
+function determineRiskScore(pair: any): string {
+  if (!pair) return 'N/A%';
   
-  return Math.max(MIN_PERFORMANCE, Math.min(performance, MAX_PERFORMANCE));
+  let score = 100;
+  
+  // Deduct points based on metrics
+  if (pair.liquidity?.usd < 10000) score -= 30;
+  if (pair.volume?.h24 < 1000) score -= 20;
+  if (Math.abs(pair.priceChange?.h24 || 0) > 30) score -= 20;
+  if (!pair.liquidity?.locked) score -= 15;
+  
+  return `${Math.max(0, score)}%`;
 }
 
-function calculateTimeDecay(lastActiveDate: Date): number {
-  const MAX_DECAY_DAYS = 365;
-  const now = new Date();
-  const daysSinceActive = (now.getTime() - lastActiveDate.getTime()) / (1000 * 60 * 60 * 24);
+function determineRiskLevel(pair: any): string {
+  if (!pair) return 'Unknown';
   
-  return Math.max(0, 1 - (daysSinceActive / MAX_DECAY_DAYS));
+  const liquidity = pair.liquidity?.usd || 0;
+  const priceChange = Math.abs(pair.priceChange?.h24 || 0);
+  const volume = pair.volume?.h24 || 0;
+
+  if (liquidity < 10000 || priceChange > 50 || volume < 1000) return 'HIGH RISK';
+  if (liquidity < 50000 || priceChange > 20 || volume < 5000) return 'Medium Risk';
+  return 'Low Risk';
 }
 
-async function calculateTrustScore(
-  recommenderId: string, 
-  metrics: RecommenderMetrics
-): Promise<number> {
-  // Input validation
-  if (!validateMetrics(metrics)) {
-    throw new Error('Invalid metrics');
-  }
-
-  const weights = {
-    successRate: 0.3,
-    avgPerformance: 0.2,
-    consistency: 0.2,
-    riskMetric: 0.15,
-    timeDecay: 0.15,
-  };
-
-  // Handle division by zero
-  const successRate = metrics.totalRecommendations === 0 ? 
-    0 : 
-    metrics.successfulRecs / metrics.totalRecommendations;
-
-  // Normalize and bound performance
-  const normalizedPerformance = normalizePerformance(metrics.avgTokenPerformance);
+function determineGrowthPattern(pair: any): string {
+  if (!pair) return 'Unknown';
   
-  // Calculate time decay with timezone handling
-  const timeDecayFactor = calculateTimeDecay(new Date(metrics.lastActiveDate));
+  const volume24Change = pair.volume?.h24ChangePercent || 0;
+  const priceChange = pair.priceChange?.h24 || 0;
 
-  // Calculate final score with precision handling
-  const score = Number(
-    (successRate * weights.successRate +
-    normalizedPerformance * weights.avgPerformance +
-    metrics.consistencyScore * weights.consistency +
-    (1 - metrics.riskScore) * weights.riskMetric +
-    timeDecayFactor * weights.timeDecay) * 100
-  ).toFixed(2);
+  if (volume24Change > 20 && priceChange > 0) return 'Rapid Growth';
+  if (volume24Change > 0 && priceChange > 0) return 'Steady Growth';
+  if (volume24Change < 0 || priceChange < 0) return 'Declining';
+  return 'Volatile';
+}
 
-  return Math.max(0, Math.min(100, parseFloat(score)));
+function formatUSD(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
+function formatSupply(supply: number | undefined): string {
+  if (!supply) return 'Unknown';
+  if (supply >= 1e9) return `${(supply / 1e9).toFixed(0)}B`;
+  if (supply >= 1e6) return `${(supply / 1e6).toFixed(0)}M`;
+  if (supply >= 1e3) return `${(supply / 1e3).toFixed(0)}K`;
+  return supply.toString();
 } 
