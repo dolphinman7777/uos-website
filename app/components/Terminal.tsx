@@ -1,30 +1,10 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Send, Home } from 'lucide-react'
-
-interface TrustAnalysis {
-  trustScore: string;
-  rugPullRisk: string;
-  volumeAnalysis: string;
-  holderDistribution: string;
-  growthPattern: string;
-  liquidityHealth: {
-    value: string;
-    change: string;
-  };
-  marketImpact: string;
-  marketCapTrend: string;
-  lastUpdated: string;
-  tokenInfo: {
-    mint: string;
-    supply: string;
-    creator: string;
-    marketCap: string;
-    mintAuthority: string;
-    lpLocked: string;
-  };
-}
+import React, { useState, useEffect, useRef } from 'react';
+import { Send, Home } from 'lucide-react';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-bash';
+import { Command, Suggestion, filterCommands, filterSuggestions } from '@/app/lib/commands';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -34,81 +14,110 @@ interface ChatMessage {
 export default function Terminal() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [analysis, setAnalysis] = useState<TrustAnalysis | null>(null);
-  const [currentToken, setCurrentToken] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleReset = () => {
-    setInput('');
-    setAnalysis(null);
-    setCurrentToken('');
-    setMessages([]);
-    setThreadId(null);
-  };
+  useEffect(() => {
+    Prism.highlightAll();
+  }, [messages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    if (input.trim()) {
+      const filteredSuggestions = filterSuggestions(input.trim());
+      setSuggestions(filteredSuggestions);
+    } else {
+      setSuggestions([]);
+    }
+  }, [input]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
+    setSelectedSuggestionIndex(-1);
   };
 
-  const analyzeToken = async (address: string) => {
+  const executeCommand = (command: string) => {
+    setMessages(prev => [...prev, { role: 'user', content: command }]);
+    setInput('');
+    setSuggestions([]);
+
     setLoading(true);
-    try {
-      const response = await fetch(`/api/trust?tokenAddress=${address}&network=solana`);
-      const data = await response.json();
-      setAnalysis(data);
-      setCurrentToken(address);
-    } catch (error) {
-      console.error('Error analyzing token:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleChat = async (message: string) => {
-    setLoading(true);
-    setMessages(prev => [...prev, { role: 'user', content: message }]);
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, threadId }),
-      });
-
-      const data = await response.json();
+    setTimeout(() => {
+      let response = '';
+      const lowercaseCommand = command.toLowerCase();
       
-      if (data.error) {
-        throw new Error(data.error);
+      // Handle different queries with more natural responses
+      if (lowercaseCommand.startsWith('what is universal os')) {
+        response = 'Universal OS is a modern, web-based operating system interface that provides a familiar terminal experience with enhanced features like command suggestions and syntax highlighting.';
+      } else if (lowercaseCommand.includes('version')) {
+        response = 'Universal OS v1.0 - A next-generation terminal interface';
+      } else if (lowercaseCommand.includes('purpose')) {
+        response = 'Universal OS aims to provide a modern, intuitive terminal experience with smart suggestions, syntax highlighting, and natural language understanding.';
+      } else if (lowercaseCommand.includes('command prediction')) {
+        response = 'Command prediction helps you by suggesting complete commands and queries as you type, making it easier to find what you\'re looking for.';
+      } else if (lowercaseCommand === 'how are you?') {
+        response = 'I\'m doing well, thank you for asking! How can I assist you today?';
+      } else if (lowercaseCommand.startsWith('hello') || lowercaseCommand.startsWith('hi')) {
+        response = 'Hello! Welcome to Universal OS. How can I help you today?';
+      } else if (lowercaseCommand.includes('help')) {
+        response = 'I can help you with:\n- Information about Universal OS\n- System commands and features\n- File operations\n- Navigation\n\nTry asking "what is..." or type a command to get started!';
+      } else if (lowercaseCommand.includes('thank')) {
+        response = 'You\'re welcome! Let me know if you need anything else.';
+      } else if (lowercaseCommand.includes('bye')) {
+        response = 'Goodbye! Have a great day!';
+      } else {
+        // For unrecognized queries, provide a helpful response
+        response = 'I\'m not sure about that. Try asking about Universal OS, its features, or type "help" for more options.';
       }
 
-      setThreadId(data.threadId);
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
-    } catch (error) {
-      console.error('Error in chat:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Sorry, I encountered an error processing your request.' 
+        content: response 
       }]);
-    } finally {
       setLoading(false);
-      setInput('');
+    }, 500);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (suggestions.length > 0) {
+      if (e.key === 'Tab' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (selectedSuggestionIndex >= 0) {
+          executeCommand(suggestions[selectedSuggestionIndex].prompt);
+        } else if (suggestions.length > 0) {
+          executeCommand(suggestions[0].prompt);
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => 
+          prev < suggestions.length - 1 ? prev + 1 : prev
+        );
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => prev > -1 ? prev - 1 : prev);
+      } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+        e.preventDefault();
+        executeCommand(suggestions[selectedSuggestionIndex].prompt);
+      }
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
+    executeCommand(input.trim());
+  };
 
-    // Check if input looks like a Solana address
-    const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(input.trim());
-    
-    if (isSolanaAddress) {
-      analyzeToken(input.trim());
-    } else {
-      handleChat(input.trim());
-    }
+  const handleReset = () => {
     setInput('');
+    setMessages([]);
+    setSuggestions([]);
   };
 
   return (
@@ -129,11 +138,11 @@ export default function Terminal() {
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-4 font-mono">
             {messages.map((msg, index) => (
-              <div key={index} className="mb-4 whitespace-pre-wrap">
+              <div key={index} className="mb-4">
                 {msg.role === 'user' ? (
-                  <div className="text-black">
-                    <span className="text-black/50">{'> '}</span>
-                    {msg.content}
+                  <div className="text-black/90">
+                    <span className="text-black/70">{'> '}</span>
+                    <code className="language-bash">{msg.content}</code>
                   </div>
                 ) : (
                   <div>
@@ -145,46 +154,62 @@ export default function Terminal() {
             ))}
 
             {loading && (
-              <div className="text-black/50">Processing...</div>
+              <div className="text-black/70">Processing...</div>
             )}
 
-            {analysis && (
-              <div className="grid grid-cols-12 gap-4 mt-4">
-                {/* Analysis content */}
-                {/* ... rest of the analysis UI ... */}
+            {!loading && messages.length === 0 && (
+              <div className="text-black/70">
+                Enter your query... (Use Tab or → to complete suggestions)
               </div>
             )}
-
-            {!loading && !analysis && messages.length === 0 && (
-              <div className="text-black/50">
-                Enter your command...
-              </div>
-            )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input Area */}
           <form onSubmit={handleSubmit} className="flex p-4 bg-white/5 border-t border-white/10">
-            <div className="flex-1 flex items-center bg-white/5 rounded-l-md px-4">
-              <span className="text-black/50 font-mono mr-2">{'>'}</span>
-              <input
-                type="text"
-                value={input}
-                onChange={handleInputChange}
-                className="flex-1 bg-transparent text-black font-mono placeholder-black/30 py-3 focus:outline-none"
-                placeholder="Enter your command..."
-              />
+            <div className="flex-1 flex items-center bg-white/5 rounded-l-md px-4 relative">
+              <span className="text-black/80 font-mono mr-2">{'>'}</span>
+              <div className="flex-1 relative">
+                {suggestions.length > 0 && (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-white/95 rounded-md shadow-lg border border-white/20 overflow-hidden">
+                    {suggestions.map((suggestion, index) => (
+                      <div
+                        key={suggestion.prompt}
+                        className={`px-4 py-2 hover:bg-black/5 cursor-pointer ${
+                          index === selectedSuggestionIndex ? 'bg-black/10' : ''
+                        }`}
+                        onClick={() => {
+                          executeCommand(suggestion.prompt);
+                        }}
+                      >
+                        <div className="font-bold text-sm text-black/90">{suggestion.prompt}</div>
+                        <div className="text-xs text-black/70 mt-0.5">{suggestion.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  className="w-full bg-transparent text-black/90 font-mono placeholder-black/50 py-3 focus:outline-none relative z-10"
+                  placeholder="Ask a question..."
+                />
+              </div>
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black border-l border-white/10 transition-colors duration-200 disabled:opacity-50"
+              className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black/90 border-l border-white/10 transition-colors duration-200 disabled:opacity-50"
             >
               <Send className="w-5 h-5" />
             </button>
             <button
               type="button"
               onClick={handleReset}
-              className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black rounded-r-md border-l border-white/10 transition-colors duration-200"
+              className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black/90 rounded-r-md border-l border-white/10 transition-colors duration-200"
               title="Clear"
             >
               <Home className="w-5 h-5" />
@@ -194,10 +219,5 @@ export default function Terminal() {
       </div>
     </div>
   );
-}
-
-function shortenAddress(address: string | undefined): string {
-  if (!address || address === 'Unknown') return 'Unknown';
-  return `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
 
