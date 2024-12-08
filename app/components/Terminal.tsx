@@ -5,6 +5,7 @@ import { Send, Home } from 'lucide-react';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-bash';
 import { Command, Suggestion, filterCommands, filterSuggestions } from '@/app/lib/commands';
+import { Avatar } from '@/app/components/ui/avatar';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -17,6 +18,7 @@ export default function Terminal() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -42,46 +44,44 @@ export default function Terminal() {
     setSelectedSuggestionIndex(-1);
   };
 
-  const executeCommand = (command: string) => {
+  const executeCommand = async (command: string) => {
     setMessages(prev => [...prev, { role: 'user', content: command }]);
     setInput('');
     setSuggestions([]);
-
     setLoading(true);
-    setTimeout(() => {
-      let response = '';
-      const lowercaseCommand = command.toLowerCase();
-      
-      // Handle different queries with more natural responses
-      if (lowercaseCommand.startsWith('what is universal os')) {
-        response = 'Universal OS is a modern, web-based operating system interface that provides a familiar terminal experience with enhanced features like command suggestions and syntax highlighting.';
-      } else if (lowercaseCommand.includes('version')) {
-        response = 'Universal OS v1.0 - A next-generation terminal interface';
-      } else if (lowercaseCommand.includes('purpose')) {
-        response = 'Universal OS aims to provide a modern, intuitive terminal experience with smart suggestions, syntax highlighting, and natural language understanding.';
-      } else if (lowercaseCommand.includes('command prediction')) {
-        response = 'Command prediction helps you by suggesting complete commands and queries as you type, making it easier to find what you\'re looking for.';
-      } else if (lowercaseCommand === 'how are you?') {
-        response = 'I\'m doing well, thank you for asking! How can I assist you today?';
-      } else if (lowercaseCommand.startsWith('hello') || lowercaseCommand.startsWith('hi')) {
-        response = 'Hello! Welcome to Universal OS. How can I help you today?';
-      } else if (lowercaseCommand.includes('help')) {
-        response = 'I can help you with:\n- Information about Universal OS\n- System commands and features\n- File operations\n- Navigation\n\nTry asking "what is..." or type a command to get started!';
-      } else if (lowercaseCommand.includes('thank')) {
-        response = 'You\'re welcome! Let me know if you need anything else.';
-      } else if (lowercaseCommand.includes('bye')) {
-        response = 'Goodbye! Have a great day!';
-      } else {
-        // For unrecognized queries, provide a helpful response
-        response = 'I\'m not sure about that. Try asking about Universal OS, its features, or type "help" for more options.';
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: command,
+          threadId: threadId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get response');
       }
 
+      setThreadId(data.threadId);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: response 
+        content: data.response 
       }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Sorry, I encountered an error. Please try again.' 
+      }]);
+      console.error('Error:', error);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -118,6 +118,7 @@ export default function Terminal() {
     setInput('');
     setMessages([]);
     setSuggestions([]);
+    setThreadId(null);
   };
 
   return (
@@ -138,16 +139,24 @@ export default function Terminal() {
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-4 font-mono">
             {messages.map((msg, index) => (
-              <div key={index} className="mb-4">
+              <div key={index} className="mb-6">
                 {msg.role === 'user' ? (
-                  <div className="text-black/90">
-                    <span className="text-black/70">{'> '}</span>
+                  <div className="text-black">
+                    <span className="text-black/80">{'> '}</span>
                     <code className="language-bash">{msg.content}</code>
                   </div>
                 ) : (
-                  <div>
-                    <span className="text-black/90">UOS: </span>
-                    {msg.content}
+                  <div className="flex items-start gap-4">
+                    <Avatar
+                      src="/uos-avatar.png"
+                      alt="UOS AI"
+                      fallback="UOS"
+                      className="w-10 h-10"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-black/90 font-semibold">UOS: </span>
+                      {msg.content}
+                    </div>
                   </div>
                 )}
               </div>
@@ -158,8 +167,20 @@ export default function Terminal() {
             )}
 
             {!loading && messages.length === 0 && (
-              <div className="text-black/70">
-                Enter your query... (Use Tab or → to complete suggestions)
+              <div className="flex items-start gap-4">
+                <Avatar
+                  src="/uos-avatar.png"
+                  alt="UOS AI"
+                  fallback="UOS"
+                  className="w-10 h-10"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-black/90">
+                    Welcome to Universal OS v1.0! How can I assist you today?
+                    <br />
+                    Enter your query... (Use Tab or → to complete suggestions)
+                  </div>
+                </div>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -220,4 +241,3 @@ export default function Terminal() {
     </div>
   );
 }
-
