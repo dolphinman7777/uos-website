@@ -5,6 +5,23 @@ import { Home } from 'lucide-react';
 import { Command, Suggestion, filterCommands, filterSuggestions } from '@/app/lib/commands';
 import { Avatar } from '@/app/components/ui/avatar';
 
+const loadingMessages = [
+  "Consulting the digital oracle...",
+  "Crunching numbers at light speed...",
+  "Assembling bytes of wisdom...",
+  "Computing in progress, stand by...",
+  "Searching the knowledge matrix..."
+];
+
+const errorMessages = {
+  default: "⚠️ Universal OS encountered a quantum fluctuation. Recalibrating systems...",
+  network: "🌐 Connection to the digital realm disrupted. Attempting to stabilize neural pathways...",
+  timeout: "⏳ Time dilation detected in processing queue. Please reinitiate your request...",
+  validation: "🔍 Input parameters outside expected dimensional boundaries. Please realign and try again...",
+  server: "🔮 The digital oracle is experiencing temporary interference. Restoring cosmic harmony...",
+  unauthorized: "🔒 Access protocols require additional authentication. Please verify your quantum signature..."
+};
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -13,12 +30,20 @@ interface ChatMessage {
 export default function Terminal() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [threadId, setThreadId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (loading) {
+      const randomIndex = Math.floor(Math.random() * loadingMessages.length);
+      setLoadingMessage(loadingMessages[randomIndex]);
+    }
+  }, [loading]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -36,6 +61,27 @@ export default function Terminal() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
     setSelectedSuggestionIndex(-1);
+  };
+
+  const getErrorMessage = (error: any): string => {
+    if (!error) return errorMessages.default;
+    
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('network'))
+      return errorMessages.network;
+    
+    if (error.message?.includes('timeout'))
+      return errorMessages.timeout;
+    
+    if (error.message?.includes('validation'))
+      return errorMessages.validation;
+    
+    if (error.status === 401 || error.message?.includes('unauthorized'))
+      return errorMessages.unauthorized;
+    
+    if (error.status >= 500)
+      return errorMessages.server;
+    
+    return errorMessages.default;
   };
 
   const executeCommand = async (command: string) => {
@@ -68,11 +114,11 @@ export default function Terminal() {
         content: data.response 
       }]);
     } catch (error) {
+      console.error('Error:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Sorry, I encountered an error. Please try again.' 
+        content: getErrorMessage(error)
       }]);
-      console.error('Error:', error);
     } finally {
       setLoading(false);
     }
@@ -157,7 +203,7 @@ export default function Terminal() {
             ))}
 
             {loading && (
-              <div className="text-black/70">Processing...</div>
+              <div className="text-black/70">{loadingMessage}</div>
             )}
 
             {!loading && messages.length === 0 && (

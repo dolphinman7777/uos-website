@@ -1,0 +1,25 @@
+# UOS Chat Interface Updates
+
+## 1. Loading Messages
+- Replace generic "Processing" with UOS-themed alternatives:
+  - "Give me a second"
+  - "Query in flight, hold tight"
+  - "Getting that ready for you..."
+
+## 2. Error Handling
+- Improve error message feedback
+  - Replace generic "Sorry, I encountered an error. Please try again"
+  - Implement more specific error messages
+
+## 3. UI/UX Updates
+- Replace "Home" icon with either:
+  - ↻ Refresh icon
+  - 🧹 Broom icon
+- Update tooltip text to:
+  - "Reset Conversation" or
+  - "Clear Conversation"
+
+## 4. Auto-suggestions Feature
+- Implement custom keywords/commands:
+  - `alpha`/`project` → Display project information and launch date
+  - `buy`/`token` → Show token purchase information
