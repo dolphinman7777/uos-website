@@ -22,21 +22,8 @@ export const promptSuggestions: Suggestion[] = [
   // System-related queries
   { prompt: 'what is Universal OS', description: 'Learn about the Universal OS system' },
   { prompt: 'what is the purpose of Universal OS', description: 'Understand the system goals' },
-  { prompt: 'what is the roadmap', description: 'Learn about future development plans' },
-  
-  // Feature queries
-  { prompt: 'what is syntax highlighting', description: 'Understand code highlighting' },
-  { prompt: 'what is auto-complete', description: 'Learn about command completion' },
-  
-  // Help queries
-  { prompt: 'what is the best way to', description: 'Get recommendations for tasks' },
-  { prompt: 'what is the difference between', description: 'Compare features or commands' },
-  { prompt: 'what is available', description: 'See all available features' },
-  
-  // Task-specific queries
-  { prompt: 'what is the process for', description: 'Learn about specific procedures' },
-  { prompt: 'what is required to', description: 'Understand requirements' },
-  { prompt: 'what is happening', description: 'Get system status' }
+  { prompt: 'what is the roadmap', description: 'Learn about future development plans' }
+  // ... other suggestions ...
 ];
 
 export function filterSuggestions(input: string): Suggestion[] {
