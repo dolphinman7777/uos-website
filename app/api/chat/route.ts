@@ -7,198 +7,187 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Initialize Upstash Redis
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || 'asst_S9t6Xm5W0KUDqq9VXhn5TPY9';
 
-// Create a rate limiter that allows 10 requests per 10 seconds
-const ratelimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(10, '10 s'),
-  analytics: true,
-  prefix: 'chat_api',
-});
+// Initialize Redis with error handling
+let redis: Redis | null = null;
+let ratelimit: Ratelimit | null = null;
 
-// This should be in your .env file
-const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || 'vs_FmX9izAlvGMTTl28lsaNKQaf';
-const QUEUE_KEY = 'chat_queue';
-const PROCESSING_KEY = 'chat_processing';
+try {
+  redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  });
 
-interface QueueMessage {
-  message: string;
-  threadId?: string;
-  requestId: string;
+  ratelimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.fixedWindow(50, '10 s'),
+    prefix: 'chat_api',
+    analytics: false,
+  });
+} catch (error) {
+  console.error('Failed to initialize Redis:', error);
 }
+
+// In-memory fallback cache
+const messageCache = new Map<string, any>();
 
 interface ChatResponse {
   response: string;
   threadId: string;
+  error?: string;
 }
 
-async function processQueue() {
+async function processMessage(message: string, threadId?: string): Promise<ChatResponse> {
   try {
-    // Get next item from queue
-    const nextRequest = await redis.lpop<QueueMessage>(QUEUE_KEY);
-    if (!nextRequest) return;
-
-    console.log('Processing message:', nextRequest);
-
-    // No need to parse, Upstash returns parsed JSON
-    const { message, threadId, requestId } = nextRequest;
+    // Reuse thread if provided, otherwise create new
+    const currentThread = threadId ? threadId : (await openai.beta.threads.create()).id;
     
-    try {
-      // Mark as processing
-      await redis.set(`${PROCESSING_KEY}:${requestId}`, 'processing', { ex: 60 });
+    // Add message to thread
+    await openai.beta.threads.messages.create(currentThread, {
+      role: 'user',
+      content: message,
+    });
 
-      // Process the request
-      const currentThread = threadId ? threadId : (await openai.beta.threads.create()).id;
-      console.log('Created/using thread:', currentThread);
+    // Create and monitor run
+    const run = await openai.beta.threads.runs.create(currentThread, {
+      assistant_id: ASSISTANT_ID,
+    });
 
-      await openai.beta.threads.messages.create(currentThread, {
-        role: 'user',
-        content: message,
-      });
-      console.log('Added message to thread');
-
-      const run = await openai.beta.threads.runs.create(currentThread, {
-        assistant_id: ASSISTANT_ID,
-      });
-      console.log('Created run:', run.id);
-
-      let runStatus = await openai.beta.threads.runs.retrieve(currentThread, run.id);
-      let attempts = 0;
-      const maxAttempts = 60; // Increased timeout to 60 seconds
-
-      while (runStatus.status !== 'completed' && attempts < maxAttempts) {
-        console.log('Run status:', runStatus.status, 'attempt:', attempts);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        runStatus = await openai.beta.threads.runs.retrieve(currentThread, run.id);
-        attempts++;
-
-        if (runStatus.status === 'failed' || runStatus.status === 'cancelled') {
-          throw new Error(`Assistant run ${runStatus.status}: ${runStatus.last_error?.message || 'Unknown error'}`);
-        }
-      }
-
-      if (attempts >= maxAttempts) {
-        throw new Error('Assistant run timed out');
-      }
-
-      const messages = await openai.beta.threads.messages.list(currentThread);
-      console.log('Got messages:', messages.data.length);
-      
-      const lastMessage = messages.data[0];
-      if (!lastMessage?.content?.[0]) {
-        throw new Error('No response from assistant');
-      }
-
-      const messageContent = lastMessage.content[0];
-      if (messageContent.type !== 'text') {
-        throw new Error('Unexpected response type from assistant');
-      }
-
-      console.log('Got response:', messageContent.text.value);
-
-      // Store the result
-      const response: ChatResponse = {
-        response: messageContent.text.value,
-        threadId: currentThread
-      };
-
-      await redis.set(`result:${requestId}`, JSON.stringify(response), { ex: 300 }); // expire in 5 minutes
-
-    } catch (error) {
-      console.error('Error processing message:', error);
-      // Store the error
-      await redis.set(`result:${requestId}`, JSON.stringify({
-        error: error instanceof Error ? error.message : 'Failed to process chat message'
-      }), { ex: 300 });
-    } finally {
-      // Clear processing status
-      await redis.del(`${PROCESSING_KEY}:${requestId}`);
-    }
+    const response = await waitForCompletion(currentThread, run.id);
+    
+    return {
+      response,
+      threadId: currentThread,
+    };
   } catch (error) {
-    console.error('Fatal queue error:', error);
-  } finally {
-    // Process next item - but wait a bit to prevent tight loops on errors
-    setTimeout(() => processQueue(), 1000);
+    console.error('Error in processMessage:', error);
+    return {
+      response: 'Error processing message',
+      threadId: threadId || '',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 
-export async function POST(request: Request) {
+async function waitForCompletion(threadId: string, runId: string, maxAttempts = 30): Promise<string> {
+  let attempts = 0;
+  
+  while (attempts < maxAttempts) {
+    const runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
+    
+    if (runStatus.status === 'completed') {
+      const messages = await openai.beta.threads.messages.list(threadId);
+      const lastMessage = messages.data[0];
+      
+      if (!lastMessage?.content?.[0] || lastMessage.content[0].type !== 'text') {
+        throw new Error('Invalid response format from assistant');
+      }
+      
+      return lastMessage.content[0].text.value;
+    }
+    
+    if (runStatus.status === 'failed' || runStatus.status === 'cancelled') {
+      throw new Error(`Run ${runStatus.status}: ${runStatus.last_error?.message || 'Unknown error'}`);
+    }
+    
+    attempts++;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  throw new Error('Assistant run timed out');
+}
+
+export async function POST(req: Request) {
   try {
-    const { message, threadId } = await request.json();
-    console.log('Received message:', message, 'threadId:', threadId);
-    
-    // Check rate limit
-    const ip = request.headers.get('x-forwarded-for') ?? '127.0.0.1';
-    const rateLimitResult = await ratelimit.limit(ip);
-    
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: 'Too many requests' },
-        { 
-          status: 429,
-          headers: {
-            'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-            'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-            'X-RateLimit-Reset': rateLimitResult.reset.toString(),
-          }
+    const { message, threadId } = await req.json();
+    const requestId = crypto.randomUUID();
+
+    // Try rate limiting if Redis is available
+    if (ratelimit) {
+      try {
+        const { success } = await ratelimit.limit(requestId);
+        if (!success) {
+          return NextResponse.json(
+            { error: 'Too many requests. Please try again later.' },
+            { status: 429 }
+          );
         }
-      );
+      } catch (error) {
+        console.error('Rate limit error:', error);
+        // Continue without rate limiting if Redis fails
+      }
     }
 
-    // Generate unique request ID
-    const requestId = crypto.randomUUID();
-    console.log('Generated requestId:', requestId);
+    // Process message
+    const result = await processMessage(message, threadId);
+    
+    // Store in memory cache
+    messageCache.set(requestId, {
+      ...result,
+      timestamp: Date.now()
+    });
 
-    // Add to queue
-    const queueMessage: QueueMessage = { message, threadId, requestId };
-    await redis.rpush(QUEUE_KEY, queueMessage); // Upstash will handle JSON stringification
+    // Try to store in Redis if available
+    if (redis) {
+      try {
+        await redis.set(`result:${requestId}`, result, { ex: 3600 });
+      } catch (error) {
+        console.error('Redis storage error:', error);
+        // Continue with in-memory cache if Redis fails
+      }
+    }
 
-    // Start queue processing if not already running
-    processQueue().catch(error => console.error('Queue processing error:', error));
-
-    // Return request ID for client to poll
-    return NextResponse.json({ requestId });
-
+    return NextResponse.json({ 
+      requestId, 
+      ...result 
+    });
   } catch (error) {
-    console.error('Error in chat route:', error);
+    console.error('Error in POST:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to process chat message' },
+      { error: 'Failed to process request' },
       { status: 500 }
     );
   }
 }
 
-// Add polling endpoint
-export async function GET(request: Request) {
+export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const requestId = searchParams.get('requestId');
-    console.log('Polling for requestId:', requestId);
+    const url = new URL(req.url);
+    const requestId = url.searchParams.get('requestId');
 
     if (!requestId) {
-      return NextResponse.json({ error: 'Missing requestId' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Missing requestId' },
+        { status: 400 }
+      );
     }
 
-    const result = await redis.get<string>(`result:${requestId}`);
-    if (!result) {
-      const processing = await redis.get<string>(`${PROCESSING_KEY}:${requestId}`);
-      console.log('Status for', requestId, ':', processing ? 'processing' : 'queued');
-      return NextResponse.json({ status: processing ? 'processing' : 'queued' });
+    // Check in-memory cache first
+    const cachedResult = messageCache.get(requestId);
+    if (cachedResult) {
+      return NextResponse.json(cachedResult);
     }
 
-    console.log('Got result for', requestId);
-    // Parse the result before returning
-    const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    return NextResponse.json(parsedResult);
+    // Try Redis if available
+    if (redis) {
+      try {
+        const result = await redis.get(`result:${requestId}`);
+        if (result) {
+          messageCache.set(requestId, result);
+          return NextResponse.json(result);
+        }
+      } catch (error) {
+        console.error('Redis fetch error:', error);
+        // Continue without Redis if it fails
+      }
+    }
+
+    return NextResponse.json({ status: 'not_found' });
   } catch (error) {
-    console.error('Error in polling:', error);
+    console.error('Error in GET:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get chat response' },
+      { error: 'Failed to fetch result' },
       { status: 500 }
     );
   }
