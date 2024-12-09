@@ -1,18 +1,32 @@
 'use client'
 
 import React from 'react'
-import { Twitter, BarChart3, MessageCircle, Send } from 'lucide-react'
+import { BarChart3, MessageCircle, Send } from 'lucide-react'
 
 export default function Dock() {
   const socialLinks = [
     {
       name: 'X (Twitter)',
-      icon: <Twitter className="w-5 h-5 text-black/70" />,
+      icon: (
+        <svg 
+          viewBox="0 0 24 24" 
+          className="w-5 h-5" 
+          fill="currentColor"
+        >
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+        </svg>
+      ),
       url: 'https://x.com/Universal_O_S'
     },
     {
       name: 'Dexscreener',
-      icon: <BarChart3 className="w-5 h-5 text-black/70" />,
+      icon: (
+        <img 
+          src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/40/1e/9a/401e9a11-c3e0-3020-3c95-3633a16b8c49/AppIcon-Production-0-0-1x_U007emarketing-0-11-0-85-220.png/460x0w.webp"
+          alt="Dexscreener"
+          className="w-5 h-5"
+        />
+      ),
       url: 'https://dexscreener.com/solana/7xhhhvbtzwqqnyqubkbmu8t6cjoqmguzcgd2xku2sdst'
     },
     {
