@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Home } from 'lucide-react';
+import { Home, RotateCw } from 'lucide-react';
 import { Command, Suggestion, filterCommands, filterSuggestions } from '@/app/lib/commands';
 import { Avatar } from '@/app/components/ui/avatar';
 
@@ -279,7 +279,7 @@ export default function Terminal() {
               className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black rounded-r-md border-l border-white/10 transition-colors duration-200"
               title="Clear"
             >
-              <Home className="w-5 h-5" />
+              <RotateCw className="w-5 h-5" />
             </button>
           </form>
         </div>
