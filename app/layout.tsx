@@ -18,8 +18,13 @@ export const metadata: Metadata = {
   title: "Universal OS",
   description: "Universal Operating System",
   icons: {
-    icon: '/uos-avatar.png',
-    apple: '/uos-avatar.png',
+    icon: [
+      {
+        url: '/favicon.png',
+        type: 'image/png',
+      }
+    ],
+    apple: '/apple-touch-icon.png',
   }
 };
 
@@ -30,10 +35,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <link rel="shortcut icon" href="/uos-avatar.png" type="image/png" />
-        <link rel="apple-touch-icon" href="/uos-avatar.png" />
-      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background font-sans antialiased`}
       >
