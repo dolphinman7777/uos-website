@@ -21,12 +21,10 @@ export const commonCommands: Command[] = [
 export const promptSuggestions: Suggestion[] = [
   // System-related queries
   { prompt: 'what is Universal OS', description: 'Learn about the Universal OS system' },
-  { prompt: 'what is the current version', description: 'Check the system version' },
   { prompt: 'what is the purpose of Universal OS', description: 'Understand the system goals' },
-  { prompt: 'what is the file system', description: 'Learn about file management' },
+  { prompt: 'what is the roadmap', description: 'Learn about future development plans' },
   
   // Feature queries
-  { prompt: 'what is command prediction', description: 'Learn about smart suggestions' },
   { prompt: 'what is syntax highlighting', description: 'Understand code highlighting' },
   { prompt: 'what is auto-complete', description: 'Learn about command completion' },
   
