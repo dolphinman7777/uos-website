@@ -91,6 +91,7 @@ export default function Terminal() {
     setLoading(true);
 
     try {
+      // Initial request to get requestId
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -108,11 +109,46 @@ export default function Terminal() {
         throw new Error(data.error || 'Failed to get response');
       }
 
-      setThreadId(data.threadId);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: data.response 
-      }]);
+      const { requestId } = data;
+      let attempts = 0;
+      const maxAttempts = 30; // 30 second timeout
+
+      // Poll for the result
+      while (attempts < maxAttempts) {
+        const pollResponse = await fetch(`/api/chat?requestId=${requestId}`);
+        const pollData = await pollResponse.json();
+
+        if (!pollResponse.ok) {
+          throw new Error(pollData.error || 'Failed to get response');
+        }
+
+        if (pollData.status === 'queued' || pollData.status === 'processing') {
+          // Wait before polling again
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          attempts++;
+          continue;
+        }
+
+        // We have a result
+        if (pollData.error) {
+          throw new Error(pollData.error);
+        }
+
+        if (pollData.response) {
+          setThreadId(pollData.threadId);
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: pollData.response 
+          }]);
+          break;
+        } else {
+          throw new Error('Invalid response format');
+        }
+      }
+
+      if (attempts >= maxAttempts) {
+        throw new Error('Request timed out');
+      }
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [...prev, { 

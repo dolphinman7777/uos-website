@@ -12,6 +12,8 @@
     "@radix-ui/react-avatar": "^1.1.1",
     "@radix-ui/react-slot": "^1.0.2",
     "@types/prismjs": "^1.26.5",
+    "@upstash/ratelimit": "^2.0.5",
+    "@upstash/redis": "^1.34.3",
     "@vercel/analytics": "^1.4.1",
     "ai": "^2.2.31",
     "class-variance-authority": "^0.7.1",

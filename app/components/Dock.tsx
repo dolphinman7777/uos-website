@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { BarChart3, MessageCircle, Send } from 'lucide-react'
+import Image from 'next/image'
 
 export default function Dock() {
   const socialLinks = [
@@ -21,11 +22,16 @@ export default function Dock() {
     {
       name: 'Dexscreener',
       icon: (
-        <img 
-          src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/40/1e/9a/401e9a11-c3e0-3020-3c95-3633a16b8c49/AppIcon-Production-0-0-1x_U007emarketing-0-11-0-85-220.png/460x0w.webp"
-          alt="Dexscreener"
-          className="w-5 h-5"
-        />
+        <div className="relative w-5 h-5">
+          <Image 
+            src="/dexscreener.logo.png"
+            alt="Dexscreener"
+            fill
+            className="object-contain"
+            sizes="20px"
+            priority
+          />
+        </div>
       ),
       url: 'https://dexscreener.com/solana/7xhhhvbtzwqqnyqubkbmu8t6cjoqmguzcgd2xku2sdst'
     },
