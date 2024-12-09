@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { Analytics } from '@vercel/analytics/react';
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -17,10 +18,14 @@ export const metadata: Metadata = {
   title: "Universal OS",
   description: "Universal Operating System",
   icons: {
-    icon: '/uos-avatar.png',
-    shortcut: '/uos-avatar.png',
-    apple: '/uos-avatar.png',
-  },
+    icon: { url: '/uos-avatar.png', type: 'image/png' },
+    shortcut: { url: '/uos-avatar.png', type: 'image/png' },
+    apple: { url: '/uos-avatar.png', type: 'image/png' },
+    other: [
+      { rel: 'mask-icon', url: '/uos-avatar.png' },
+      { rel: 'favicon', url: '/uos-avatar.png' }
+    ]
+  }
 };
 
 export default function RootLayout({
@@ -36,6 +41,7 @@ export default function RootLayout({
         <div className="relative flex min-h-screen flex-col">
           <main className="flex-1">{children}</main>
         </div>
+        <Analytics />
       </body>
     </html>
   );
