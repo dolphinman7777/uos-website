@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Home } from 'lucide-react';
-import Prism from 'prismjs';
-import 'prismjs/components/prism-bash';
 import { Command, Suggestion, filterCommands, filterSuggestions } from '@/app/lib/commands';
 import { Avatar } from '@/app/components/ui/avatar';
 
@@ -21,10 +19,6 @@ export default function Terminal() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    Prism.highlightAll();
-  }, [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -142,8 +136,8 @@ export default function Terminal() {
               <div key={index} className="mb-6">
                 {msg.role === 'user' ? (
                   <div className="text-black">
-                    <span className="text-black/80">{'> '}</span>
-                    <code className="language-bash">{msg.content}</code>
+                    <span className="text-black">{'> '}</span>
+                    <span className="text-black">{msg.content}</span>
                   </div>
                 ) : (
                   <div className="flex items-start gap-4">
@@ -176,9 +170,7 @@ export default function Terminal() {
                 />
                 <div className="flex-1 min-w-0">
                   <div className="text-black/90">
-                    Welcome to Universal OS v1.0! How can I assist you today?
-                    <br />
-                    Enter your query... (Use Tab or → to complete suggestions)
+                    Welcome to Universal OS v1.0!
                   </div>
                 </div>
               </div>
@@ -189,7 +181,7 @@ export default function Terminal() {
           {/* Input Area */}
           <form onSubmit={handleSubmit} className="flex p-4 bg-white/5 border-t border-white/10">
             <div className="flex-1 flex items-center bg-white/5 rounded-l-md px-4 relative">
-              <span className="text-black/80 font-mono mr-2">{'>'}</span>
+              <span className="text-black font-mono mr-2">{'>'}</span>
               <div className="flex-1 relative">
                 {suggestions.length > 0 && (
                   <div className="absolute bottom-full left-0 right-0 mb-2 bg-white/95 rounded-md shadow-lg border border-white/20 overflow-hidden">
@@ -203,7 +195,7 @@ export default function Terminal() {
                           executeCommand(suggestion.prompt);
                         }}
                       >
-                        <div className="font-bold text-sm text-black/90">{suggestion.prompt}</div>
+                        <div className="font-bold text-sm text-black">{suggestion.prompt}</div>
                         <div className="text-xs text-black/70 mt-0.5">{suggestion.description}</div>
                       </div>
                     ))}
@@ -215,7 +207,7 @@ export default function Terminal() {
                   value={input}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
-                  className="w-full bg-transparent text-black/90 font-mono placeholder-black/50 py-3 focus:outline-none relative z-10"
+                  className="w-full bg-transparent text-black font-mono placeholder-black/50 py-3 focus:outline-none relative z-10"
                   placeholder="Ask a question..."
                 />
               </div>
@@ -223,14 +215,14 @@ export default function Terminal() {
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black/90 border-l border-white/10 transition-colors duration-200 disabled:opacity-50"
+              className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black border-l border-white/10 transition-colors duration-200 disabled:opacity-50"
             >
               <Send className="w-5 h-5" />
             </button>
             <button
               type="button"
               onClick={handleReset}
-              className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black/90 rounded-r-md border-l border-white/10 transition-colors duration-200"
+              className="px-6 py-3 bg-black/10 hover:bg-black/20 text-black rounded-r-md border-l border-white/10 transition-colors duration-200"
               title="Clear"
             >
               <Home className="w-5 h-5" />
