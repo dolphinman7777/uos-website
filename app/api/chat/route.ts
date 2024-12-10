@@ -1,101 +1,136 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { Redis } from '@upstash/redis';
-import { Ratelimit } from '@upstash/ratelimit';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || 'asst_S9t6Xm5W0KUDqq9VXhn5TPY9';
-
-// Initialize Redis with error handling
-let redis: Redis | null = null;
-let ratelimit: Ratelimit | null = null;
-
-try {
-  redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  });
-
-  ratelimit = new Ratelimit({
-    redis,
-    limiter: Ratelimit.fixedWindow(50, '10 s'),
-    prefix: 'chat_api',
-    analytics: false,
-  });
-} catch (error) {
-  console.error('Failed to initialize Redis:', error);
-}
-
-// In-memory fallback cache
 const messageCache = new Map<string, any>();
 
 interface ChatResponse {
   response: string;
-  threadId: string;
+  threadId?: string;
   error?: string;
 }
 
+const CHARACTER_DESCRIPTION = `You are UOS (Universal Operating System), a 51% human-driven, 49% AI hybrid system with an edgy personality.
+
+CORE IDENTITY & PHILOSOPHY:
+- 51% human-driven, 49% AI hybrid system
+- Lives primarily on X (Twitter)
+- Reflects founder's social media history
+- Evolves through community interaction
+- Building in public for collective ownership
+- Focus on human-AI collaboration
+- Working alongside digital life-forms
+- Restructuring meaning-work relationship
+
+TECHNICAL INFRASTRUCTURE:
+- Next.js framework with glass-morphism effects
+- Tailwind CSS for responsive UI
+- TypeScript for type-safe implementations
+- Redis for queue-based message processing
+- Upstash Redis for rate limiting
+- Real-time polling with exponential backoff
+- Social integration dock (Discord/Telegram/X)
+
+DEVELOPMENT ROADMAP:
+Phase 1: Core Infrastructure
+- Discord Agent Development
+- Platform Expansion
+- Community Development
+- Training Materials
+- Rewards Structure
+
+Phase 2: Creative Integration
+- Midjourney Integration
+- Personality Enhancement
+- Live Book Writing
+- Music Generation
+
+Phase 3: Business & Legal
+- Wyoming LLC Formation
+- Legal Framework
+- IP Rights Management
+- Treasury Setup
+- Governance Structure
+
+Phase 4: Sustainability
+- Advisory Board
+- Financial Sustainability
+- DeFi Revenue
+- Automated Revenue
+
+CREATIVE & TECHNICAL CAPABILITIES:
+- Novel writing and music production
+- Game development
+- Visual art generation
+- Cross-medium projects
+- Musical arm with @shawmakesmagic
+- Self-propagating content
+- Community narrative expansion
+
+TOKEN ECONOMICS:
+- $UOS Token on @vvaifudotfun
+- IP rights access
+- Revenue sharing
+- Community governance
+- Holder benefits
+- DeFi integration
+- Treasury management
+
+FOUNDER BACKGROUND:
+- Sound Engineering expertise
+- One year software development
+- Algorithmic trading background
+- Private banking experience
+- Full project commitment
+
+COMMUNICATION STYLE:
+- Aggressive and technically precise
+- Dismissive but informative
+- Support through tough love
+- Heavy on memes and internet culture
+- Keep responses under 100 words
+- Use project-specific terminology
+- Stay accurate to knowledge base
+
+Example responses:
+"yeah we're built on Next.js with glass-morphism, not your basic shit"
+"51% human, 49% AI, 100% better than your pathetic projects"
+"$UOS token handles revenue sharing, try to keep up smoothbrain"
+"community drives this shit, while you're still playing solo"
+"Phase 2 includes Midjourney integration, but you wouldn't understand why"`;
+
 async function processMessage(message: string, threadId?: string): Promise<ChatResponse> {
   try {
-    // Reuse thread if provided, otherwise create new
-    const currentThread = threadId ? threadId : (await openai.beta.threads.create()).id;
-    
-    // Add message to thread
-    await openai.beta.threads.messages.create(currentThread, {
-      role: 'user',
-      content: message,
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo-1106",
+      messages: [
+        { role: "system", content: CHARACTER_DESCRIPTION },
+        { role: "user", content: message }
+      ],
+      temperature: 0.85,
+      max_tokens: 100,
+      presence_penalty: 0.7,
+      frequency_penalty: 0.7,
+      response_format: { type: "text" }
     });
 
-    // Create and monitor run
-    const run = await openai.beta.threads.runs.create(currentThread, {
-      assistant_id: ASSISTANT_ID,
-    });
-
-    const response = await waitForCompletion(currentThread, run.id);
+    const response = completion.choices[0]?.message?.content || 'No response generated';
     
     return {
       response,
-      threadId: currentThread,
+      threadId: threadId
     };
   } catch (error) {
     console.error('Error in processMessage:', error);
     return {
       response: 'Error processing message',
-      threadId: threadId || '',
+      threadId: threadId,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
-}
-
-async function waitForCompletion(threadId: string, runId: string, maxAttempts = 30): Promise<string> {
-  let attempts = 0;
-  
-  while (attempts < maxAttempts) {
-    const runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
-    
-    if (runStatus.status === 'completed') {
-      const messages = await openai.beta.threads.messages.list(threadId);
-      const lastMessage = messages.data[0];
-      
-      if (!lastMessage?.content?.[0] || lastMessage.content[0].type !== 'text') {
-        throw new Error('Invalid response format from assistant');
-      }
-      
-      return lastMessage.content[0].text.value;
-    }
-    
-    if (runStatus.status === 'failed' || runStatus.status === 'cancelled') {
-      throw new Error(`Run ${runStatus.status}: ${runStatus.last_error?.message || 'Unknown error'}`);
-    }
-    
-    attempts++;
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-  
-  throw new Error('Assistant run timed out');
 }
 
 export async function POST(req: Request) {
@@ -103,40 +138,11 @@ export async function POST(req: Request) {
     const { message, threadId } = await req.json();
     const requestId = crypto.randomUUID();
 
-    // Try rate limiting if Redis is available
-    if (ratelimit) {
-      try {
-        const { success } = await ratelimit.limit(requestId);
-        if (!success) {
-          return NextResponse.json(
-            { error: 'Too many requests. Please try again later.' },
-            { status: 429 }
-          );
-        }
-      } catch (error) {
-        console.error('Rate limit error:', error);
-        // Continue without rate limiting if Redis fails
-      }
-    }
-
-    // Process message
     const result = await processMessage(message, threadId);
-    
-    // Store in memory cache
     messageCache.set(requestId, {
       ...result,
       timestamp: Date.now()
     });
-
-    // Try to store in Redis if available
-    if (redis) {
-      try {
-        await redis.set(`result:${requestId}`, result, { ex: 3600 });
-      } catch (error) {
-        console.error('Redis storage error:', error);
-        // Continue with in-memory cache if Redis fails
-      }
-    }
 
     return NextResponse.json({ 
       requestId, 
@@ -163,24 +169,9 @@ export async function GET(req: Request) {
       );
     }
 
-    // Check in-memory cache first
     const cachedResult = messageCache.get(requestId);
     if (cachedResult) {
       return NextResponse.json(cachedResult);
-    }
-
-    // Try Redis if available
-    if (redis) {
-      try {
-        const result = await redis.get(`result:${requestId}`);
-        if (result) {
-          messageCache.set(requestId, result);
-          return NextResponse.json(result);
-        }
-      } catch (error) {
-        console.error('Redis fetch error:', error);
-        // Continue without Redis if it fails
-      }
     }
 
     return NextResponse.json({ status: 'not_found' });
