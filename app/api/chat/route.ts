@@ -1,12 +1,12 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { getTokenPrice, searchPairs, getTokenPairs, getTrendingPairs, TokenInfo, PairInfo } from '@/app/utils/dexscreener';
+import { getTokenPrice, getTokenPairs, TokenInfo, PairInfo } from '@/app/utils/dexscreener';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const messageCache = new Map<string, any>();
+const messageCache = new Map<string, unknown>();
 const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS;
 
 interface ChatResponse {
@@ -164,7 +164,7 @@ async function processMessage(message: string, threadId?: string): Promise<ChatR
       // Check for token addresses
       const ethMatch = message.match(/\b(0x)?[a-fA-F0-9]{40}\b/);
       const solanaMatch = message.match(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/);
-      let tokenAddress = ethMatch ? ethMatch[0] : solanaMatch ? solanaMatch[0] : null;
+      const tokenAddress = ethMatch ? ethMatch[0] : solanaMatch ? solanaMatch[0] : null;
 
       if (tokenAddress) {
         console.log('Fetching data for token:', tokenAddress);

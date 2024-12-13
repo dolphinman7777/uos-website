@@ -66,22 +66,6 @@ export async function getTokenPrice(address: string): Promise<TokenInfo | null> 
   }
 }
 
-export async function searchPairs(query: string): Promise<PairInfo[]> {
-  try {
-    const response = await fetch(`${DEX_API_BASE}/dex/search/?q=${encodeURIComponent(query)}`);
-    
-    if (!response.ok) {
-      throw new Error(`API returned status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.pairs || [];
-  } catch (error) {
-    console.error('Error searching pairs:', error);
-    return [];
-  }
-}
-
 export async function getTokenPairs(address: string): Promise<PairInfo[]> {
   try {
     const response = await fetch(`${DEX_API_BASE}/dex/tokens/${address}`);
@@ -102,31 +86,6 @@ export async function getTokenPairs(address: string): Promise<PairInfo[]> {
     return data.pairs || [];
   } catch (error) {
     console.error('Error fetching token pairs:', error);
-    return [];
-  }
-}
-
-export async function getTrendingPairs(): Promise<PairInfo[]> {
-  try {
-    // First try to get UOS pairs
-    if (UOS_TOKEN_ADDRESS) {
-      const uosPairs = await getTokenPairs(UOS_TOKEN_ADDRESS);
-      if (uosPairs.length > 0) {
-        return uosPairs;
-      }
-    }
-
-    // Fallback to general search
-    const response = await fetch(`${DEX_API_BASE}/dex/search?q=`);
-    
-    if (!response.ok) {
-      throw new Error(`API returned status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.pairs || [];
-  } catch (error) {
-    console.error('Error fetching trending pairs:', error);
     return [];
   }
 } 
