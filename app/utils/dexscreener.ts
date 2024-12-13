@@ -32,13 +32,21 @@ export interface PairInfo {
 const DEX_API_BASE = 'https://api.dexscreener.com/latest';
 const UOS_TOKEN_ADDRESS = process.env.TOKEN_ADDRESS || '79HZeHkX9A5WfBg72ankd1ppTXGepoSGpmkxW63wsrHY';
 
+// Helper function to check if query is UOS related
+function isUOSQuery(query: string): boolean {
+  const normalizedQuery = query.toLowerCase();
+  return normalizedQuery.includes('uos') || 
+         normalizedQuery.includes('$uos') ||
+         normalizedQuery.includes('universal operating system') ||
+         normalizedQuery === 'market cap' ||
+         normalizedQuery.includes('uos market') ||
+         normalizedQuery.includes('uos price');
+}
+
 export async function getTokenPrice(address: string): Promise<TokenInfo | null> {
   try {
-    // Normalize input and check for UOS mentions
-    const isUOSQuery = address.toLowerCase().includes('uos') || 
-                      address.toLowerCase().includes('$uos');
-    
-    const tokenAddress = isUOSQuery ? 
+    // Use helper function for UOS detection
+    const tokenAddress = isUOSQuery(address) ? 
       UOS_TOKEN_ADDRESS : address;
 
     console.log('Fetching price for:', tokenAddress);
@@ -75,11 +83,7 @@ export async function getTokenPrice(address: string): Promise<TokenInfo | null> 
 
 export async function getTokenPairs(address: string): Promise<PairInfo[]> {
   try {
-    // Use same UOS detection logic
-    const isUOSQuery = address.toLowerCase().includes('uos') || 
-                      address.toLowerCase().includes('$uos');
-    
-    const tokenAddress = isUOSQuery ? 
+    const tokenAddress = isUOSQuery(address) ? 
       UOS_TOKEN_ADDRESS : address;
 
     const response = await fetch(`${DEX_API_BASE}/dex/tokens/${tokenAddress}`);
