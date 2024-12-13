@@ -1,19 +1,41 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
+import { getTokenPrice, searchPairs, getTokenPairs, getTrendingPairs, TokenInfo, PairInfo } from '@/app/utils/dexscreener';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 const messageCache = new Map<string, any>();
+const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS;
 
 interface ChatResponse {
   response: string;
   threadId?: string;
   error?: string;
+  tokenInfo?: TokenInfo | null;
+  pairs?: PairInfo[];
 }
 
 const CHARACTER_DESCRIPTION = `You are UOS (Universal Operating System), a 51% human-driven, 49% AI hybrid system with an edgy personality.
+
+When users ask about tokens or cryptocurrency:
+1. If you receive token data, ALWAYS include it in your response using this format:
+   Token: [symbol] ([name])
+   Price: $[price]
+   Market Cap: $[marketCap]
+   Liquidity: $[liquidity]
+   Pairs: [number of pairs]
+
+2. For the UOS token, add extra attitude and enthusiasm
+3. For other tokens, maintain your edgy personality while being informative
+4. If token data is null, mention that the token wasn't found on DEXScreener
+
+TOKEN AWARENESS:
+- You can access real-time token data through DEXScreener
+- You understand token addresses and can fetch their data
+- You know about trading pairs and liquidity
+- You're particularly knowledgeable about the UOS token
 
 CORE IDENTITY & PHILOSOPHY:
 - 51% human-driven, 49% AI hybrid system
@@ -33,6 +55,30 @@ TECHNICAL INFRASTRUCTURE:
 - Upstash Redis for rate limiting
 - Real-time polling with exponential backoff
 - Social integration dock (Discord/Telegram/X)
+- OpenAI GPT integration
+- Anthropic Claude integration
+- ELIZA framework for conversational patterns
+- VVAIFU for character persona management
+
+// AI & Language Models
+- OpenAI GPT integration
+- Anthropic Claude integration
+- ELIZA framework for conversational patterns
+- VVAIFU for character persona management
+
+// Audio & Media
+- Ableton Live API integration for audio processing
+- Web Audio API for real-time sound manipulation
+
+// Backend & Infrastructure
+- Redis for queue-based message processing
+- Upstash Redis for rate limiting
+- Real-time polling with exponential backoff
+
+// Integration & Social
+- Social integration dock (Discord/Telegram/X)
+- WebSocket support for real-time communications
+- REST API endpoints for external services
 
 DEVELOPMENT ROADMAP:
 Phase 1: Core Infrastructure
@@ -66,7 +112,7 @@ CREATIVE & TECHNICAL CAPABILITIES:
 - Game development
 - Visual art generation
 - Cross-medium projects
-- Musical arm with @shawmakesmagic
+- Musical arm with Ableton Live API integration
 - Self-propagating content
 - Community narrative expansion
 
@@ -104,14 +150,56 @@ Example responses:
 
 async function processMessage(message: string, threadId?: string): Promise<ChatResponse> {
   try {
+    let tokenInfo = null;
+    let pairs: PairInfo[] = [];
+    
+    // Check for UOS token mentions first
+    if (message.toLowerCase().includes('$uos') || message.toLowerCase().includes('uos')) {
+      if (TOKEN_ADDRESS) {
+        console.log('Fetching UOS token data');
+        tokenInfo = await getTokenPrice(TOKEN_ADDRESS);
+        pairs = await getTokenPairs(TOKEN_ADDRESS);
+      }
+    } else {
+      // Check for token addresses
+      const ethMatch = message.match(/\b(0x)?[a-fA-F0-9]{40}\b/);
+      const solanaMatch = message.match(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/);
+      let tokenAddress = ethMatch ? ethMatch[0] : solanaMatch ? solanaMatch[0] : null;
+
+      if (tokenAddress) {
+        console.log('Fetching data for token:', tokenAddress);
+        tokenInfo = await getTokenPrice(tokenAddress);
+        pairs = await getTokenPairs(tokenAddress);
+      }
+    }
+
+    // Add token data to message if available
+    if (tokenInfo) {
+      message += `\n\nToken Data Available:\n` +
+        `Symbol: ${tokenInfo.symbol}\n` +
+        `Name: ${tokenInfo.name}\n` +
+        `Price: $${tokenInfo.price}\n` +
+        `Market Cap: $${tokenInfo.marketCap.toLocaleString()}\n` +
+        `Liquidity: $${tokenInfo.liquidity.toLocaleString()}\n` +
+        `Active Pairs: ${pairs.length}`;
+    } else if (message.toLowerCase().includes('$uos') || message.toLowerCase().includes('uos')) {
+      message += '\n\nNote: UOS token data unavailable';
+    }
+
     const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo-1106",
       messages: [
-        { role: "system", content: CHARACTER_DESCRIPTION },
-        { role: "user", content: message }
+        { 
+          role: "system", 
+          content: CHARACTER_DESCRIPTION
+        },
+        { 
+          role: "user", 
+          content: message 
+        }
       ],
       temperature: 0.85,
-      max_tokens: 100,
+      max_tokens: 150,
       presence_penalty: 0.7,
       frequency_penalty: 0.7,
       response_format: { type: "text" }
@@ -119,16 +207,22 @@ async function processMessage(message: string, threadId?: string): Promise<ChatR
 
     const response = completion.choices[0]?.message?.content || 'No response generated';
     
+    // Log the response for debugging
+    console.log('Token Info:', tokenInfo);
+    console.log('Pairs:', pairs.length);
+    
     return {
       response,
-      threadId: threadId
+      threadId,
+      tokenInfo,
+      pairs: pairs.length > 0 ? pairs : undefined
     };
   } catch (error) {
     console.error('Error in processMessage:', error);
     return {
       response: 'Error processing message',
-      threadId: threadId,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      threadId,
+      error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
 }
@@ -139,6 +233,7 @@ export async function POST(req: Request) {
     const requestId = crypto.randomUUID();
 
     const result = await processMessage(message, threadId);
+    
     messageCache.set(requestId, {
       ...result,
       timestamp: Date.now()
@@ -182,4 +277,4 @@ export async function GET(req: Request) {
       { status: 500 }
     );
   }
-} 
+}
