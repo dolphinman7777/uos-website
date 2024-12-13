@@ -34,7 +34,11 @@ const UOS_TOKEN_ADDRESS = process.env.TOKEN_ADDRESS || '79HZeHkX9A5WfBg72ankd1pp
 
 export async function getTokenPrice(address: string): Promise<TokenInfo | null> {
   try {
-    const tokenAddress = (address.toLowerCase() === 'uos') ? 
+    // Normalize input and check for UOS mentions
+    const isUOSQuery = address.toLowerCase().includes('uos') || 
+                      address.toLowerCase().includes('$uos');
+    
+    const tokenAddress = isUOSQuery ? 
       UOS_TOKEN_ADDRESS : address;
 
     console.log('Fetching price for:', tokenAddress);
@@ -71,7 +75,14 @@ export async function getTokenPrice(address: string): Promise<TokenInfo | null> 
 
 export async function getTokenPairs(address: string): Promise<PairInfo[]> {
   try {
-    const response = await fetch(`${DEX_API_BASE}/dex/tokens/${address}`);
+    // Use same UOS detection logic
+    const isUOSQuery = address.toLowerCase().includes('uos') || 
+                      address.toLowerCase().includes('$uos');
+    
+    const tokenAddress = isUOSQuery ? 
+      UOS_TOKEN_ADDRESS : address;
+
+    const response = await fetch(`${DEX_API_BASE}/dex/tokens/${tokenAddress}`);
     
     if (!response.ok) {
       throw new Error(`API returned status: ${response.status}`);
@@ -80,7 +91,7 @@ export async function getTokenPairs(address: string): Promise<PairInfo[]> {
     const data = await response.json();
     
     // If this is UOS token, prioritize its pairs
-    if (address === UOS_TOKEN_ADDRESS) {
+    if (tokenAddress === UOS_TOKEN_ADDRESS) {
       return data.pairs?.sort((a: PairInfo, b: PairInfo) => 
         (b.volume24h || 0) - (a.volume24h || 0)
       ) || [];
