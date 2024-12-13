@@ -30,12 +30,15 @@ export interface PairInfo {
 }
 
 const DEX_API_BASE = 'https://api.dexscreener.com/latest';
-const UOS_TOKEN_ADDRESS = process.env.TOKEN_ADDRESS || '';
+const UOS_TOKEN_ADDRESS = process.env.TOKEN_ADDRESS || '79HZeHkX9A5WfBg72ankd1ppTXGepoSGpmkxW63wsrHY';
 
 export async function getTokenPrice(address: string): Promise<TokenInfo | null> {
   try {
-    console.log('Fetching price for:', address);
-    const response = await fetch(`${DEX_API_BASE}/dex/tokens/${address}`);
+    const tokenAddress = (address.toLowerCase() === 'uos') ? 
+      UOS_TOKEN_ADDRESS : address;
+
+    console.log('Fetching price for:', tokenAddress);
+    const response = await fetch(`${DEX_API_BASE}/dex/tokens/${tokenAddress}`);
     
     if (!response.ok) {
       console.error('DEXScreener API error:', response.status);
@@ -58,7 +61,7 @@ export async function getTokenPrice(address: string): Promise<TokenInfo | null> 
       liquidity: pair.liquidity?.usd || 0,
       symbol: pair.baseToken.symbol,
       name: pair.baseToken.name,
-      isUOS: address === UOS_TOKEN_ADDRESS
+      isUOS: tokenAddress === UOS_TOKEN_ADDRESS
     };
   } catch (error) {
     console.error('Error fetching token price:', error);
